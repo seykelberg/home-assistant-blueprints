@@ -1,0 +1,147 @@
+blueprint:
+  name: Slim EV laden (PV + goedkope stroom + hysteresis)
+  description: >
+    PV-first laden met 1500W startdrempel, goedkope netstroom (<0.05 €/kWh),
+    dynamische stroomregeling en SoC-beveiliging voor Easee + Mach-E.
+
+  domain: automation
+
+  input:
+    charger:
+      name: Easee charger
+      selector:
+        entity:
+          domain: switch
+
+    soc_sensor:
+      name: Ford SoC sensor
+      selector:
+        entity:
+          domain: sensor
+
+    pv_sensor:
+      name: Net injectie sensor (W)
+      selector:
+        entity:
+          domain: sensor
+
+    price_sensor:
+      name: Nord Pool prijs sensor
+      selector:
+        entity:
+          domain: sensor
+
+    soc_limit:
+      name: Max SoC (%)
+      default: 80
+      selector:
+        number:
+          min: 50
+          max: 100
+          step: 1
+
+    start_pv_w:
+      name: PV start drempel (W)
+      default: 1500
+      selector:
+        number:
+          min: 500
+          max: 5000
+          step: 100
+
+    stop_pv_w:
+      name: PV stop drempel (W)
+      default: 300
+      selector:
+        number:
+          min: 0
+          max: 1000
+          step: 50
+
+    cheap_threshold:
+      name: Goedkope stroom drempel
+      default: 50
+      selector:
+        number:
+          min: 10
+          max: 200
+          step: 1
+
+    min_a:
+      name: Min stroom (A)
+      default: 6
+      selector:
+        number:
+          min: 6
+          max: 10
+          step: 1
+
+    max_a:
+      name: Max stroom (A)
+      default: 16
+      selector:
+        number:
+          min: 10
+          max: 32
+          step: 1
+
+trigger:
+  - platform: state
+    entity_id:
+      - !input energie_omvormer_uitgangsvermogen
+      - !input nordpool_kwh_be_eur_3_10_006
+      - !input fordpass_wf0tk3r78pma21450_soc
+
+condition: []
+
+action:
+  - variables:
+      pv_w: "{{ states(sensor.energie_omvormer_uitgangsvermogen) | float(0) }}"
+      soc: "{{ states(sensor.fordpass_wf0tk3r78pma21450_soc) | float(0) }}"
+      price: "{{ states(sensor.nordpool_kwh_be_eur_3_10_006) | float(999) }}"
+      cheap: "{{ price < (cheap_threshold | float) }}"
+
+      pv_a: "{{ (pv_w / 230) | round(0) }}"
+
+      soc_limit: !input soc_limit
+      min_a: !input min_a
+      max_a: !input max_a
+
+      current: >-
+        {% if soc >= soc_limit %}
+          0
+        {% elif pv_w > start_pv_w %}
+          {{ [pv_a, max_a] | min }}
+        {% elif pv_w < stop_pv_w %}
+          {% if cheap %}
+            {{ max_a }}
+          {% else %}
+            0
+          {% endif %}
+        {% else %}
+          {% if cheap %}
+            {{ max_a }}
+          {% else %}
+            {{ min_a }}
+          {% endif %}
+        {% endif %}
+
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ current | int > 0 }}"
+        sequence:
+          - service: easee.set_dynamic_limit
+            target:
+              entity_id: !input charger
+            data:
+              current: "{{ current | int }}"
+
+          - service: easee.start_charging
+            target:
+              entity_id: !input charger
+
+    default:
+      - service: easee.stop_charging
+        target:
+          entity_id: !input charger
