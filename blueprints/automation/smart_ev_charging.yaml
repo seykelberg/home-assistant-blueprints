@@ -88,9 +88,9 @@ blueprint:
 trigger:
   - platform: state
     entity_id:
-      - !input pv_sensor
-      - !input price_sensor
-      - !input soc_sensor
+      - !input energie_omvormer_uitgangsvermogen
+      - !input nordpool_kwh_be_eur_3_10_006
+      - !input fordpass_wf0tk3r78pma21450_soc
 
 condition: []
 
