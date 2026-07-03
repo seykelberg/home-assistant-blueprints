@@ -2,7 +2,7 @@ blueprint:
   name: Slim EV laden (PV + goedkope stroom + hysteresis)
   description: >
     PV-first laden met 1500W startdrempel, goedkope netstroom (<0.05 €/kWh),
-    dynamische stroomregeling en SoC-beveiliging voor Easee + Ford Mach-E.
+    dynamische stroomregeling en SoC-beveiliging voor Easee + Mach-E.
 
   domain: automation
 
